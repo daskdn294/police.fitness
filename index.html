@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Precinct Fitness Competition</title>
+    <style>
+        :root {
+            --primary: #1a365d;
+            --secondary: #2b6cb0;
+            --accent: #e53e3e;
+            --bg: #f7fafc;
+            --text: #2d3748;
+            --success: #2f855a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            background: var(--primary);
+            color: white;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 { margin: 0; font-size: 2.5rem; }
+        h2 { color: var(--primary); border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 0; }
+
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+        }
+
+        #adminPanel {
+            display: none;
+            border: 2px dashed var(--accent);
+            background: #fffaf0;
+        }
+
+        .btn {
+            background-color: var(--secondary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background-color: var(--primary); }
+        .btn-admin-toggle { background-color: #4a5568; margin-bottom: 15px;}
+        .btn-admin { background-color: var(--accent); }
+        .btn-admin:hover { background-color: #9b2c2c; }
+        .btn-danger { background-color: #e53e3e; margin-top: 5px; }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"], input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .code-display {
+            background: #edf2f7;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 1.4rem;
+            text-align: center;
+            margin-top: 10px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e0;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th { background-color: #edf2f7; color: var(--primary); }
+        tr:hover { background-color: #f7fafc; }
+        
+        .status-msg {
+            color: var(--success);
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .admin-box {
+            border-top: 1px solid #e2e8f0;
+            margin-top: 15px;
+            padding-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>PD Fitness Challenge Leaderboard</h1>
+        <p>Stay Fit. Stay Sharp. Stay Safe.</p>
+    </header>
+
+    <button class="btn btn-admin-toggle" id="adminToggleBtn" onclick="accessAdminPanel()">🔒 Open Admin Panel</button>
+
+    <div id="adminPanel" class="card">
+        <h2>🔒 Admin Control Panel (Authorized Only)</h2>
+        
+        <div class="form-group">
+            <button class="btn btn-admin" onclick="generateBlankCode()">Generate New Team Registration Code</button>
+        </div>
+        
+        <div id="codeOutput" style="display:none; margin-bottom: 20px;">
+            <p>Give this code to the first officer of the new team. They will name the team when they log in:</p>
+            <div class="code-display" id="generatedCode"></div>
+        </div>
+
+        <div class="admin-box">
+            <h3>Manage Existing Teams</h3>
+            <div class="form-group">
+                <label for="adminTeamSelect">Select Team to Manage:</label>
+                <select id="adminTeamSelect">
+                    </select>
+            </div>
+            <button class="btn" onclick="resetTeamName()">Reset Selected Team's Name</button>
+            <button class="btn btn-danger" onclick="deleteTeamComplete()">Delete Team & Clear Scores</button>
+        </div>
+    </div>
+
+    <div class="card" id="joinCard">
+        <h2>👥 Officer Login / Join Competition</h2>
+        <div class="form-group">
+            <label for="userNameInput">Your Name (Officer/User):</label>
+            <input type="text" id="userNameInput" placeholder="e.g., Officer Smith">
+        </div>
+        <div class="form-group">
+            <label for="joinCodeInput">Team Invite Code:</label>
+            <input type="text" id="joinCodeInput" placeholder="Enter the code provided by Admin">
+        </div>
+        
+        <div class="form-group" id="teamNamingGroup" style="display: none;">
+            <label for="newTeamNameInput" style="color: var(--accent);">You're the first to use this code! Name your Team:</label>
+            <input type="text" id="newTeamNameInput" placeholder="e.g., K9 Unit, Night Shift Squad">
+        </div>
+
+        <button class="btn" id="joinBtn" onclick="processTeamJoin()">Connect & Verify Code</button>
+        <div id="joinStatus" class="status-msg"></div>
+    </div>
+
+    <div class="card" id="scoreCard" style="display:none;">
+        <h2>🏋️‍♂️ Submit Your Score</h2>
+        <p>Logged in as: <strong id="activeUser"></strong> | Team: <strong id="activeTeam"></strong></p>
+        <div class="form-group">
+            <label for="scoreInput">Enter Workout Score:</label>
+            <input type="number" id="scoreInput" placeholder="Enter numerical result">
+        </div>
+        <button class="btn" onclick="submitScore()">Submit Score</button>
+        <div id="scoreStatus" class="status-msg"></div>
+    </div>
+
+    <div class="card">
+        <h2>📊 Competition Leaderboard</h2>
+        <table id="leaderboardTable">
+            <thead>
+                <tr>
+                    <th>Team Name</th>
+                    <th>Officer Name</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboardBody">
+                </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    // System setup
+    if (!localStorage.getItem('teamDatabase')) {
+        localStorage.setItem('teamDatabase', JSON.stringify({})); // { code: "Team Name" or "" }
+    }
+    if (!localStorage.getItem('scoreDatabase')) {
+        localStorage.setItem('scoreDatabase', JSON.stringify([])); // [{team, user, score}]
+    }
+
+    let activeSessionUser = null;
+    let activeSessionCode = null;
+    let isFirstUserForCode = false;
+
+    // 1. Password Protection Check
+    function accessAdminPanel() {
+        const password = prompt("Enter Admin Passcode to view configuration tools:");
+        if (password === "7821") {
+            document.getElementById('adminPanel').style.display = 'block';
+            document.getElementById('adminToggleBtn').style.display = 'none';
+            populateAdminDropdown();
+            alert("Access Granted.");
+        } else if (password !== null) {
+            alert("Access Denied. Incorrect passcode.");
+        }
+    }
+
+    // 2. Admin: Generate empty code structure
+    function generateBlankCode() {
+        const uniqueCode = 'FIT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+        const db = JSON.parse(localStorage.getItem('teamDatabase'));
+        
+        db[uniqueCode] = ""; // Keep name empty until first user claims it
+        localStorage.setItem('teamDatabase', JSON.stringify(db));
+
+        document.getElementById('generatedCode').innerText = uniqueCode;
+        document.getElementById('codeOutput').style.display = 'block';
+        populateAdminDropdown();
+    }
+
+    // Listener to see if code needs a name assignment setup
+    document.getElementById('joinCodeInput').addEventListener('input', function() {
+        const enteredCode = this.value.trim().toUpperCase();
+        const db = JSON.parse(localStorage.getItem('teamDatabase'));
+        
+        if (db[enteredCode] === "") {
+            document.getElementById('teamNamingGroup').style.display = 'block';
+            document.getElementById('joinBtn').innerText = "Create Team & Login";
+            isFirstUserForCode = true;
+        } else {
+            document.getElementById('teamNamingGroup').style.display = 'none';
+            document.getElementById('joinBtn').innerText = "Connect & Verify Code";
+            isFirstUserForCode = false;
+        }
+    });
+
+    // 3. User Login & Setup 
+    function processTeamJoin() {
+        const name = document.getElementById('userNameInput').value.trim();
+        const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+        let db = JSON.parse(localStorage.getItem('teamDatabase'));
+
+        if (!name) { return alert("Please enter your name first."); }
+        if (!db.hasOwnProperty(code)) { return alert("Invalid Code. Contact your Administrator."); }
+
+        let designatedTeamName = db[code];
+
+        // If code is empty, this user must pick the name
+        if (isFirstUserForCode) {
+            const chosenName = document.getElementById('newTeamNameInput').value.trim();
+            if (!chosenName) { return alert("You are the team lead! Please pick a Team Name."); }
+            
+            db[code] = chosenName;
+            localStorage.setItem('teamDatabase', JSON.stringify(db));
+            designatedTeamName = chosenName;
+        }
+
+        activeSessionUser = name;
+        activeSessionCode = code;
+
+        // Display Score Panel
+        document.getElementById('activeUser').innerText = activeSessionUser;
+        document.getElementById('activeTeam').innerText = designatedTeamName;
+        document.getElementById('scoreCard').style.display = 'block';
+        document.getElementById('joinStatus').innerText = `Successfully registered to team [${designatedTeamName}]`;
+        
+        // Reset Inputs
+        document.getElementById('userNameInput').value = '';
+        document.getElementById('joinCodeInput').value = '';
+        document.getElementById('teamNamingGroup').style.display = 'none';
+        
+        populateAdminDropdown();
+        renderLeaderboard();
+    }
+
+    // 4. Submit Workout Entries
+    function submitScore() {
+        const numScore = parseInt(document.getElementById('scoreInput').value);
+        if (isNaN(numScore)) { return alert("Please enter a numeric valid score."); }
+
+        const db = JSON.parse(localStorage.getItem('teamDatabase'));
+        const scores = JSON.parse(localStorage.getItem('scoreDatabase'));
+        const teamName = db[activeSessionCode];
+
+        const matchIdx = scores.findIndex(s => s.team === teamName && s.user === activeSessionUser);
+        if (matchIdx > -1) {
+            scores[matchIdx].score = numScore;
+        } else {
+            scores.push({ team: teamName, user: activeSessionUser, score: numScore });
+        }
+
+        localStorage.setItem('scoreDatabase', JSON.stringify(scores));
+        document.getElementById('scoreStatus').innerText = "Score recorded updated live!";
+        document.getElementById('scoreInput').value = '';
+        renderLeaderboard();
+    }
+
+    // Admin Tools: Populate Select dropdown cleanly
+    function populateAdminDropdown() {
+        const select = document.getElementById('adminTeamSelect');
+        const db = JSON.parse(localStorage.getItem('teamDatabase'));
+        select.innerHTML = '';
+
+        for (const [code, name] of Object.entries(db)) {
+            const displayName = name === "" ? `Unassigned Code (${code})` : `${name} [${code}]`;
+            const option = document.createElement('option');
+            option.value = code;
+            option.text = displayName;
+            select.appendChild(option);
+        }
+    }
+
+    // Admin Tool: Wipe out name only
+    function resetTeamName() {
+        const targetCode = document.getElementById('adminTeamSelect').value;
+        if(!targetCode) return;
+        
+        let db = JSON.parse(localStorage.getItem('teamDatabase'));
+        db[targetCode] = ""; // make it blank so next person rename it
+        localStorage.setItem('teamDatabase', JSON.stringify(db));
+        
+        alert("Team name cleared! The next person to use this code will be prompted to rename it.");
+        populateAdminDropdown();
+        renderLeaderboard();
+    }
+
+    // Admin Tool: Full Removal
+    function deleteTeamComplete() {
+        const targetCode = document.getElementById('adminTeamSelect').value;
+        if(!targetCode || !confirm("Are you sure you want to delete this team and wipe out all user scores attached to it?")) return;
+        
+        let db = JSON.parse(localStorage.getItem('teamDatabase'));
+        let scores = JSON.parse(localStorage.getItem('scoreDatabase'));
+        const targetName = db[targetCode];
+
+        delete db[targetCode]; // remove key
+        const scrubbedScores = scores.filter(s => s.team !== targetName);
+
+        localStorage.setItem('teamDatabase', JSON.stringify(db));
+        localStorage.setItem('scoreDatabase', JSON.stringify(scrubbedScores));
+
+        alert("Team and associated scores purged completely.");
+        populateAdminDropdown();
+        renderLeaderboard();
+    }
+
+    // Main Draw Panel Rendering
+    function renderLeaderboard() {
+        const scores = JSON.parse(localStorage.getItem('scoreDatabase')) || [];
+        const tbody = document.getElementById('leaderboardBody');
+        tbody.innerHTML = '';
+
+        scores.sort((a, b) => b.score - a.score);
+
+        if(scores.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#718096;">No metrics compiled yet.</td></tr>`;
+            return;
+        }
+
+        scores.forEach(item => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td><strong>${item.team}</strong></td><td>${item.user}</td><td><strong>${item.score}</strong></td>`;
+            tbody.appendChild(row);
+        });
+    }
+
+    renderLeaderboard();
+</script>
+</body>
+</html>
