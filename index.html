@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Precinct Fitness Competition</title>
+    <!-- Include Firebase Core and Database SDKs over the internet -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
         :root {
             --primary: #1a365d;
@@ -141,15 +144,14 @@
 
     <button class="btn btn-admin-toggle" id="adminToggleBtn" onclick="accessAdminPanel()">🔒 Open Admin Panel</button>
 
+    <!-- ADMIN PANEL -->
     <div id="adminPanel" class="card">
         <h2>🔒 Admin Control Panel (Authorized Only)</h2>
-        
         <div class="form-group">
             <button class="btn btn-admin" onclick="generateBlankCode()">Generate New Team Registration Code</button>
         </div>
-        
         <div id="codeOutput" style="display:none; margin-bottom: 20px;">
-            <p>Give this code to the first officer of the new team. They will name the team when they log in:</p>
+            <p>Give this code to the first officer of the new team:</p>
             <div class="code-display" id="generatedCode"></div>
         </div>
 
@@ -157,14 +159,14 @@
             <h3>Manage Existing Teams</h3>
             <div class="form-group">
                 <label for="adminTeamSelect">Select Team to Manage:</label>
-                <select id="adminTeamSelect">
-                    </select>
+                <select id="adminTeamSelect"></select>
             </div>
             <button class="btn" onclick="resetTeamName()">Reset Selected Team's Name</button>
             <button class="btn btn-danger" onclick="deleteTeamComplete()">Delete Team & Clear Scores</button>
         </div>
     </div>
 
+    <!-- JOIN TEAM SECTION -->
     <div class="card" id="joinCard">
         <h2>👥 Officer Login / Join Competition</h2>
         <div class="form-group">
@@ -185,6 +187,7 @@
         <div id="joinStatus" class="status-msg"></div>
     </div>
 
+    <!-- SCORE SUBMISSION CARD -->
     <div class="card" id="scoreCard" style="display:none;">
         <h2>🏋️‍♂️ Submit Your Score</h2>
         <p>Logged in as: <strong id="activeUser"></strong> | Team: <strong id="activeTeam"></strong></p>
@@ -196,6 +199,7 @@
         <div id="scoreStatus" class="status-msg"></div>
     </div>
 
+    <!-- LEADERBOARD DATA -->
     <div class="card">
         <h2>📊 Competition Leaderboard</h2>
         <table id="leaderboardTable">
@@ -206,26 +210,47 @@
                     <th>Score</th>
                 </tr>
             </thead>
-            <tbody id="leaderboardBody">
-                </tbody>
+            <tbody id="leaderboardBody"></tbody>
         </table>
     </div>
 </div>
 
 <script>
-    // System setup
-    if (!localStorage.getItem('teamDatabase')) {
-        localStorage.setItem('teamDatabase', JSON.stringify({})); // { code: "Team Name" or "" }
-    }
-    if (!localStorage.getItem('scoreDatabase')) {
-        localStorage.setItem('scoreDatabase', JSON.stringify([])); // [{team, user, score}]
-    }
+    // Replace the block below with your actual Firebase configuration keys!
+    const firebaseConfig = {
+        // PASTE_YOUR_FIREBASE_CONFIG_HERE
+        // It should look like this:
+        // apiKey: "AIzaSy...",
+        // authDomain: "...",
+        // databaseURL: "https://...",
+        // projectId: "...",
+        // storageBucket: "...",
+        // messagingSenderId: "...",
+        // appId: "..."
+    };
+
+    // Initialize Firebase Connection
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
 
     let activeSessionUser = null;
     let activeSessionCode = null;
     let isFirstUserForCode = false;
+    let cachedTeams = {}; 
 
-    // 1. Password Protection Check
+    // Sync database data in real time
+    database.ref('teams').on('value', (snapshot) => {
+        cachedTeams = snapshot.val() || {};
+        populateAdminDropdown();
+        checkCodeInputState();
+    });
+
+    database.ref('scores').on('value', (snapshot) => {
+        const scoresData = snapshot.val() || {};
+        const scoresArray = Object.keys(scoresData).map(key => scoresData[key]);
+        renderLeaderboard(scoresArray);
+    });
+
     function accessAdminPanel() {
         const password = prompt("Enter Admin Passcode to view configuration tools:");
         if (password === "7821") {
@@ -238,25 +263,17 @@
         }
     }
 
-    // 2. Admin: Generate empty code structure
     function generateBlankCode() {
         const uniqueCode = 'FIT-' + Math.random().toString(36).substring(2, 8).toUpperCase();
-        const db = JSON.parse(localStorage.getItem('teamDatabase'));
-        
-        db[uniqueCode] = ""; // Keep name empty until first user claims it
-        localStorage.setItem('teamDatabase', JSON.stringify(db));
+        database.ref('teams/' + uniqueCode).set({ name: "" });
 
         document.getElementById('generatedCode').innerText = uniqueCode;
         document.getElementById('codeOutput').style.display = 'block';
-        populateAdminDropdown();
     }
 
-    // Listener to see if code needs a name assignment setup
-    document.getElementById('joinCodeInput').addEventListener('input', function() {
-        const enteredCode = this.value.trim().toUpperCase();
-        const db = JSON.parse(localStorage.getItem('teamDatabase'));
-        
-        if (db[enteredCode] === "") {
+    function checkCodeInputState() {
+        const enteredCode = document.getElementById('joinCodeInput').value.trim().toUpperCase();
+        if (cachedTeams[enteredCode] && cachedTeams[enteredCode].name === "") {
             document.getElementById('teamNamingGroup').style.display = 'block';
             document.getElementById('joinBtn').innerText = "Create Team & Login";
             isFirstUserForCode = true;
@@ -265,77 +282,65 @@
             document.getElementById('joinBtn').innerText = "Connect & Verify Code";
             isFirstUserForCode = false;
         }
-    });
+    }
 
-    // 3. User Login & Setup 
+    document.getElementById('joinCodeInput').addEventListener('input', checkCodeInputState);
+
     function processTeamJoin() {
         const name = document.getElementById('userNameInput').value.trim();
         const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
-        let db = JSON.parse(localStorage.getItem('teamDatabase'));
 
-        if (!name) { return alert("Please enter your name first."); }
-        if (!db.hasOwnProperty(code)) { return alert("Invalid Code. Contact your Administrator."); }
+        if (!name) return alert("Please enter your name first.");
+        if (!cachedTeams.hasOwnProperty(code)) return alert("Invalid Code. Contact your Administrator.");
 
-        let designatedTeamName = db[code];
+        let designatedTeamName = cachedTeams[code].name;
 
-        // If code is empty, this user must pick the name
         if (isFirstUserForCode) {
             const chosenName = document.getElementById('newTeamNameInput').value.trim();
-            if (!chosenName) { return alert("You are the team lead! Please pick a Team Name."); }
+            if (!chosenName) return alert("You are the team lead! Please pick a Team Name.");
             
-            db[code] = chosenName;
-            localStorage.setItem('teamDatabase', JSON.stringify(db));
+            database.ref('teams/' + code).set({ name: chosenName });
             designatedTeamName = chosenName;
         }
 
         activeSessionUser = name;
         activeSessionCode = code;
 
-        // Display Score Panel
         document.getElementById('activeUser').innerText = activeSessionUser;
         document.getElementById('activeTeam').innerText = designatedTeamName;
         document.getElementById('scoreCard').style.display = 'block';
         document.getElementById('joinStatus').innerText = `Successfully registered to team [${designatedTeamName}]`;
         
-        // Reset Inputs
         document.getElementById('userNameInput').value = '';
         document.getElementById('joinCodeInput').value = '';
         document.getElementById('teamNamingGroup').style.display = 'none';
-        
-        populateAdminDropdown();
-        renderLeaderboard();
     }
 
-    // 4. Submit Workout Entries
     function submitScore() {
         const numScore = parseInt(document.getElementById('scoreInput').value);
-        if (isNaN(numScore)) { return alert("Please enter a numeric valid score."); }
+        if (isNaN(numScore)) return alert("Please enter a numeric valid score.");
 
-        const db = JSON.parse(localStorage.getItem('teamDatabase'));
-        const scores = JSON.parse(localStorage.getItem('scoreDatabase'));
-        const teamName = db[activeSessionCode];
+        const teamName = cachedTeams[activeSessionCode].name;
+        // Primary user key generated to keep individual scores distinct
+        const userSlug = `${teamName}_${activeSessionUser}`.replace(/[.#$\[\]]/g, ""); 
 
-        const matchIdx = scores.findIndex(s => s.team === teamName && s.user === activeSessionUser);
-        if (matchIdx > -1) {
-            scores[matchIdx].score = numScore;
-        } else {
-            scores.push({ team: teamName, user: activeSessionUser, score: numScore });
-        }
+        database.ref('scores/' + userSlug).set({
+            team: teamName,
+            user: activeSessionUser,
+            score: numScore
+        });
 
-        localStorage.setItem('scoreDatabase', JSON.stringify(scores));
-        document.getElementById('scoreStatus').innerText = "Score recorded updated live!";
+        document.getElementById('scoreStatus').innerText = "Score recorded dynamically online!";
         document.getElementById('scoreInput').value = '';
-        renderLeaderboard();
     }
 
-    // Admin Tools: Populate Select dropdown cleanly
     function populateAdminDropdown() {
         const select = document.getElementById('adminTeamSelect');
-        const db = JSON.parse(localStorage.getItem('teamDatabase'));
+        if(!select) return;
         select.innerHTML = '';
 
-        for (const [code, name] of Object.entries(db)) {
-            const displayName = name === "" ? `Unassigned Code (${code})` : `${name} [${code}]`;
+        for (const [code, data] of Object.entries(cachedTeams)) {
+            const displayName = data.name === "" ? `Unassigned Code (${code})` : `${data.name} [${code}]`;
             const option = document.createElement('option');
             option.value = code;
             option.text = displayName;
@@ -343,61 +348,51 @@
         }
     }
 
-    // Admin Tool: Wipe out name only
     function resetTeamName() {
         const targetCode = document.getElementById('adminTeamSelect').value;
         if(!targetCode) return;
         
-        let db = JSON.parse(localStorage.getItem('teamDatabase'));
-        db[targetCode] = ""; // make it blank so next person rename it
-        localStorage.setItem('teamDatabase', JSON.stringify(db));
-        
-        alert("Team name cleared! The next person to use this code will be prompted to rename it.");
-        populateAdminDropdown();
-        renderLeaderboard();
+        database.ref('teams/' + targetCode).set({ name: "" });
+        alert("Team name cleared online!");
     }
 
-    // Admin Tool: Full Removal
     function deleteTeamComplete() {
         const targetCode = document.getElementById('adminTeamSelect').value;
-        if(!targetCode || !confirm("Are you sure you want to delete this team and wipe out all user scores attached to it?")) return;
+        if(!targetCode || !confirm("Are you sure you want to delete this team and wipe out all scores attached to it?")) return;
         
-        let db = JSON.parse(localStorage.getItem('teamDatabase'));
-        let scores = JSON.parse(localStorage.getItem('scoreDatabase'));
-        const targetName = db[targetCode];
+        const targetName = cachedTeams[targetCode].name;
+        database.ref('teams/' + targetCode).remove();
 
-        delete db[targetCode]; // remove key
-        const scrubbedScores = scores.filter(s => s.team !== targetName);
-
-        localStorage.setItem('teamDatabase', JSON.stringify(db));
-        localStorage.setItem('scoreDatabase', JSON.stringify(scrubbedScores));
+        // Clear associated team scores cleanly
+        database.ref('scores').once('value', (snapshot) => {
+            const scores = snapshot.val() || {};
+            for (const key in scores) {
+                if (scores[key].team === targetName) {
+                    database.ref('scores/' + key).remove();
+                }
+            }
+        });
 
         alert("Team and associated scores purged completely.");
-        populateAdminDropdown();
-        renderLeaderboard();
     }
 
-    // Main Draw Panel Rendering
-    function renderLeaderboard() {
-        const scores = JSON.parse(localStorage.getItem('scoreDatabase')) || [];
+    function renderLeaderboard(scoresArray) {
         const tbody = document.getElementById('leaderboardBody');
         tbody.innerHTML = '';
 
-        scores.sort((a, b) => b.score - a.score);
+        scoresArray.sort((a, b) => b.score - a.score);
 
-        if(scores.length === 0) {
+        if(scoresArray.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#718096;">No metrics compiled yet.</td></tr>`;
             return;
         }
 
-        scores.forEach(item => {
+        scoresArray.forEach(item => {
             const row = document.createElement('tr');
             row.innerHTML = `<td><strong>${item.team}</strong></td><td>${item.user}</td><td><strong>${item.score}</strong></td>`;
             tbody.appendChild(row);
         });
     }
-
-    renderLeaderboard();
 </script>
 </body>
 </html>
