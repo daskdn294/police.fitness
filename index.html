@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Precinct Fitness Competition</title>
+    <title>FFITNESS LEADERBOARD</title>
     <!-- Include Firebase Core and Database SDKs over the internet -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
@@ -55,12 +55,13 @@
             -webkit-text-fill-color: transparent;
         }
         
-        header p {
+        #liveClock {
             margin: 8px 0 0 0;
             color: var(--accent-blue);
             font-weight: 600;
             font-size: 0.95rem;
             letter-spacing: 0.05em;
+            font-family: monospace;
         }
 
         h2 { 
@@ -149,6 +150,7 @@
             border-radius: 8px;
             font-size: 1rem;
             color: var(--text-main);
+            font-family: inherit;
             transition: border-color 0.2s;
         }
 
@@ -195,6 +197,16 @@
             border-bottom: 1px solid var(--border-color);
         }
 
+        .clickable-row {
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+
+        .clickable-row:hover td {
+            border-color: var(--accent-blue);
+            background-color: #131f38;
+        }
+
         td:first-child {
             border-left: 1px solid var(--border-color);
             border-top-left-radius: 8px;
@@ -207,7 +219,6 @@
             border-bottom-right-radius: 8px;
         }
         
-        /* Podium places text styling instead of icons */
         tr:nth-child(1) td { border-color: rgba(245, 158, 11, 0.3); }
         tr:nth-child(1) td:last-child { color: var(--accent-gold); }
         
@@ -249,14 +260,73 @@
         .rank-1 { background: rgba(245, 158, 11, 0.2); color: var(--accent-gold); }
         .rank-2 { background: rgba(203, 213, 225, 0.2); color: #cbd5e1; }
         .rank-3 { background: rgba(180, 83, 9, 0.2); color: #f97316; }
+
+        /* Custom Modal / Popup Box */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+
+        .modal-content {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 24px;
+            border-radius: 16px;
+            max-width: 550px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .modal-close:hover {
+            color: var(--text-main);
+        }
+
+        .audit-item {
+            background-color: var(--bg-main);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <header>
-        <h1>PD Fitness Leaderboard</h1>
-        <p>STAY FIT • STAY SHARP</p>
+        <h1>FFITNESS LEADERBOARD</h1>
+        <div id="liveClock">Loading Date & Time...</div>
     </header>
 
     <!-- Admin Authentication Toggle -->
@@ -278,7 +348,7 @@
             <div class="form-group">
                 <select id="adminTeamSelect"></select>
             </div>
-            <button class="btn" style="background-color: transparent; border: 1px solid var(--border-color); color: white; margin-bottom: 8px;" onclick="resetTeamName()">Reset Team Name</button>
+            <button class="btn" style="background-color: transparent; border: 1px solid var(--border-color); color: white; margin-bottom: 8px;" onclick="changeTeamNameCustom()">Change Selected Team Name</button>
             <button class="btn btn-danger" onclick="deleteTeamComplete()">Delete Team Entirely</button>
         </div>
     </div>
@@ -296,7 +366,7 @@
         </div>
         
         <div class="form-group" id="teamNamingGroup" style="display: none;">
-            <label for="newTeamNameInput" style="color: var(--accent-gold);">First officer with this code! Name your Team:</label>
+            <label for="newTeamNameInput" style="color: var(--accent-gold);">First officer with this code! Name your Team (You are Captain):</label>
             <input type="text" id="newTeamNameInput" placeholder="e.g., K9 Unit, Night Shift Squad">
         </div>
 
@@ -321,16 +391,27 @@
     <!-- LEADERBOARD DATA -->
     <div class="card">
         <h2>Current Standings</h2>
+        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: -12px; margin-bottom: 16px;">Protected: Admins and Team Captains can click rows to inspect detailed scores.</p>
         <table id="leaderboardTable">
             <thead>
                 <tr>
                     <th>Team</th>
-                    <th>Officer</th>
-                    <th style="text-align: right;">Score</th>
+                    <th style="text-align: right;">Total Team Score</th>
                 </tr>
             </thead>
             <tbody id="leaderboardBody"></tbody>
         </table>
+    </div>
+</div>
+
+<!-- AUDIT MODAL (POPUP) -->
+<div id="auditModal" class="modal" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <h2 id="modalTitle" style="margin: 0;">Team Audit</h2>
+            <button class="modal-close" onclick="document.getElementById('auditModal').style.display='none'">×</button>
+        </div>
+        <div id="modalBody"></div>
     </div>
 </div>
 
@@ -353,22 +434,45 @@
     let activeSessionCode = null;
     let isFirstUserForCode = false;
     let cachedTeams = {}; 
+    let cachedScores = {};
+    let masterAdminUnlocked = false;
+
+    // Real-time Ticking Clock
+    function updateClock() {
+        const now = new Date();
+        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+        const dateStr = now.toLocaleDateString(undefined, options);
+        const timeStr = now.toLocaleTimeString(undefined, { hour12: true });
+        document.getElementById('liveClock').innerText = `${dateStr} • ${timeStr}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
 
     database.ref('teams').on('value', (snapshot) => {
         cachedTeams = snapshot.val() || {};
         populateAdminDropdown();
         checkCodeInputState();
+        reprocessLeaderboard();
     });
 
     database.ref('scores').on('value', (snapshot) => {
-        const scoresData = snapshot.val() || {};
-        const scoresArray = Object.keys(scoresData).map(key => scoresData[key]);
-        renderLeaderboard(scoresArray);
+        cachedScores = snapshot.val() || {};
+        reprocessLeaderboard();
     });
+
+    // Anti-troll validator function
+    function isValidReadableName(str) {
+        const clean = str.trim();
+        if (clean.length < 4) return false;
+        if (/[bcdfghjklmnpqrstvwxyz]{5,}/i.test(clean)) return false;
+        if (!/[a-zA-Z]/.test(clean)) return false;
+        return true;
+    }
 
     function accessAdminPanel() {
         const password = prompt("Enter Admin Passcode:");
         if (password === "7821") {
+            masterAdminUnlocked = true;
             document.getElementById('adminPanel').style.display = 'block';
             document.getElementById('adminToggleBtn').style.display = 'none';
             populateAdminDropdown();
@@ -404,6 +508,7 @@
         const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
 
         if (!name) return alert("Please enter your name.");
+        if (!isValidReadableName(name)) return alert("Please enter a valid, recognizable name. Avoid random letters or shortcuts.");
         if (!cachedTeams.hasOwnProperty(code)) return alert("Invalid Code.");
 
         let designatedTeamName = cachedTeams[code].name;
@@ -411,6 +516,7 @@
         if (isFirstUserForCode) {
             const chosenName = document.getElementById('newTeamNameInput').value.trim();
             if (!chosenName) return alert("Please type a Team Name.");
+            if (!isValidReadableName(chosenName)) return alert("Invalid Team Name. Use a realistic name (minimum 4 characters, no random letters).");
             
             database.ref('teams/' + code).set({ name: chosenName });
             designatedTeamName = chosenName;
@@ -442,7 +548,7 @@
             score: numScore
         });
 
-        document.getElementById('scoreStatus').innerText = "Score recorded successfully!";
+        document.getElementById('scoreStatus').innerText = "Score metrics recorded!";
         document.getElementById('scoreInput').value = '';
     }
 
@@ -460,11 +566,31 @@
         }
     }
 
-    function resetTeamName() {
+    function changeTeamNameCustom() {
         const targetCode = document.getElementById('adminTeamSelect').value;
-        if(!targetCode) return;
-        database.ref('teams/' + targetCode).set({ name: "" });
-        alert("Team name reset.");
+        if (!targetCode) return;
+
+        const currentName = cachedTeams[targetCode].name;
+        const newName = prompt(`Enter new name for this team (Currently: "${currentName || 'Unassigned'}"):`);
+        
+        if (newName === null) return; 
+        const cleanedName = newName.trim();
+        if (!cleanedName) return alert("Team name cannot be empty.");
+        if (!isValidReadableName(cleanedName)) return alert("That name looks like spam. Please enter a valid name.");
+
+        database.ref('teams/' + targetCode).set({ name: cleanedName });
+
+        if (currentName) {
+            database.ref('scores').once('value', (snapshot) => {
+                const scores = snapshot.val() || {};
+                for (const key in scores) {
+                    if (scores[key].team === currentName) {
+                        database.ref('scores/' + key).update({ team: cleanedName });
+                    }
+                }
+            });
+        }
+        alert("Team name updated successfully!");
     }
 
     function deleteTeamComplete() {
@@ -485,19 +611,39 @@
         alert("Team data deleted.");
     }
 
-    function renderLeaderboard(scoresArray) {
+    function reprocessLeaderboard() {
+        const scoresArray = Object.keys(cachedScores).map(key => cachedScores[key]);
+        
+        const teamTotals = {};
+        scoresArray.forEach(item => {
+            if (!teamTotals[item.team]) {
+                teamTotals[item.team] = 0;
+            }
+            teamTotals[item.team] += item.score;
+        });
+
+        const leaderboardData = Object.keys(teamTotals).map(teamName => {
+            return { team: teamName, totalScore: teamTotals[teamName] };
+        });
+
+        leaderboardData.sort((a, b) => b.totalScore - a.totalScore);
+        renderLeaderboard(leaderboardData);
+    }
+
+    function renderLeaderboard(leaderboardData) {
         const tbody = document.getElementById('leaderboardBody');
         tbody.innerHTML = '';
 
-        scoresArray.sort((a, b) => b.score - a.score);
-
-        if(scoresArray.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color: var(--text-muted); border: none; padding: 32px 16px;">No metrics logged yet.</td></tr>`;
+        if(leaderboardData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color: var(--text-muted); border: none; padding: 32px 16px;">No metrics logged yet.</td></tr>`;
             return;
         }
 
-        scoresArray.forEach((item, index) => {
+        leaderboardData.forEach((item, index) => {
             const row = document.createElement('tr');
+            row.className = "clickable-row";
+            row.onclick = () => verifyAuditAccess(item.team);
+
             let rankBadge = "";
             if (index === 0) rankBadge = `<span class="rank-label rank-1">1st</span>`;
             if (index === 1) rankBadge = `<span class="rank-label rank-2">2nd</span>`;
@@ -505,11 +651,67 @@
 
             row.innerHTML = `
                 <td><strong>${rankBadge}${item.team}</strong></td>
-                <td style="color: var(--text-muted);">${item.user}</td>
-                <td style="text-align: right; font-weight: 700; font-size: 1.1rem;">${item.score}</td>
+                <td style="text-align: right; font-weight: 700; font-size: 1.1rem;">${item.totalScore}</td>
             `;
             tbody.appendChild(row);
         });
+    }
+
+    function verifyAuditAccess(teamName) {
+        let teamCodeMatch = null;
+        for (const [code, data] of Object.entries(cachedTeams)) {
+            if (data.name === teamName) {
+                teamCodeMatch = code;
+                break;
+            }
+        }
+
+        if (masterAdminUnlocked) {
+            return openTeamAudit(teamName);
+        }
+
+        const checkPass = prompt(`Protected Access. Enter Master Admin Passcode OR the exact Invite Code (FIT-XXXXXX) for "${teamName}" to view files:`);
+        if (!checkPass) return;
+
+        const cleanInput = checkPass.trim().toUpperCase();
+
+        if (cleanInput === "7821" || (teamCodeMatch && cleanInput === teamCodeMatch)) {
+            openTeamAudit(teamName);
+        } else {
+            alert("Unauthorized. Only the Admin or the designated Team Captain can view this roster.");
+        }
+    }
+
+    function openTeamAudit(teamName) {
+        document.getElementById('modalTitle').innerText = `${teamName} - Member Breakdown`;
+        const modalBody = document.getElementById('modalBody');
+        modalBody.innerHTML = '';
+
+        const scoresArray = Object.keys(cachedScores).map(key => cachedScores[key]);
+        const teamMembers = scoresArray.filter(item => item.team === teamName);
+        
+        teamMembers.sort((a,b) => b.score - a.score);
+
+        teamMembers.forEach(member => {
+            const div = document.createElement('div');
+            div.className = "audit-item";
+
+            div.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong style="color: var(--text-main); font-size: 1.05rem;">${member.user}</strong>
+                    <span style="color: var(--accent-green); font-weight:700; font-size: 1.1rem;">${member.score} pts</span>
+                </div>
+            `;
+            modalBody.appendChild(div);
+        });
+
+        document.getElementById('auditModal').style.display = 'flex';
+    }
+
+    function closeModal(e) {
+        if (e.target.id === 'auditModal') {
+            document.getElementById('auditModal').style.display = 'none';
+        }
     }
 </script>
 </body>
