@@ -142,9 +142,10 @@
         <p>Stay Fit. Stay Sharp. Stay Safe.</p>
     </header>
 
+    <!-- Admin Authentication Toggle -->
     <button class="btn btn-admin-toggle" id="adminToggleBtn" onclick="accessAdminPanel()">🔒 Open Admin Panel</button>
 
-    <!-- ADMIN PANEL -->
+    <!-- ADMIN CONTROL PANEL -->
     <div id="adminPanel" class="card">
         <h2>🔒 Admin Control Panel (Authorized Only)</h2>
         <div class="form-group">
@@ -216,11 +217,11 @@
 </div>
 
 <script>
-    // Replace the block below with your actual Firebase configuration keys!
-const firebaseConfig = {
+    // Config values mapped exactly to your Firebase configurations from image_94ddaf.png
+    const firebaseConfig = {
         apiKey: "AIzaSyAlc5_jvyEwaNLiWU1Wrc-cUaWfSIpuLF8",
         authDomain: "precinct-fitness.firebaseapp.com",
-        databaseURL: "https://precinct-fitness-default-rtdb.firebaseio.com",
+        databaseURL: "https://precinct-fitness-default-rtdb.firebaseio.com/",
         projectId: "precinct-fitness",
         storageBucket: "precinct-fitness.firebasestorage.app",
         messagingSenderId: "752143857902",
@@ -250,6 +251,7 @@ const firebaseConfig = {
         renderLeaderboard(scoresArray);
     });
 
+    // Password validation for Owner Rights
     function accessAdminPanel() {
         const password = prompt("Enter Admin Passcode to view configuration tools:");
         if (password === "7821") {
@@ -320,7 +322,6 @@ const firebaseConfig = {
         if (isNaN(numScore)) return alert("Please enter a numeric valid score.");
 
         const teamName = cachedTeams[activeSessionCode].name;
-        // Primary user key generated to keep individual scores distinct
         const userSlug = `${teamName}_${activeSessionUser}`.replace(/[.#$\[\]]/g, ""); 
 
         database.ref('scores/' + userSlug).set({
@@ -362,7 +363,6 @@ const firebaseConfig = {
         const targetName = cachedTeams[targetCode].name;
         database.ref('teams/' + targetCode).remove();
 
-        // Clear associated team scores cleanly
         database.ref('scores').once('value', (snapshot) => {
             const scores = snapshot.val() || {};
             for (const key in scores) {
