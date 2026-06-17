@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FFITNESS LEADERBOARD</title>
-    <!-- Include Firebase Core and Database SDKs over the internet -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
     <style>
@@ -319,6 +318,19 @@
             padding: 12px;
             margin-bottom: 12px;
         }
+
+        .flag-badge {
+            background-color: rgba(239, 68, 68, 0.15);
+            color: var(--accent-red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            display: inline-block;
+            margin-top: 4px;
+        }
     </style>
 </head>
 <body>
@@ -329,10 +341,8 @@
         <div id="liveClock">Loading Date & Time...</div>
     </header>
 
-    <!-- Admin Authentication Toggle -->
     <button class="btn btn-admin-toggle" id="adminToggleBtn" onclick="accessAdminPanel()">Open Admin Panel</button>
 
-    <!-- ADMIN CONTROL PANEL -->
     <div id="adminPanel" class="card">
         <h2>Admin Control Panel</h2>
         <div class="form-group">
@@ -353,7 +363,6 @@
         </div>
     </div>
 
-    <!-- JOIN TEAM SECTION -->
     <div class="card" id="joinCard">
         <h2>Join Competition</h2>
         <div class="form-group">
@@ -374,7 +383,6 @@
         <div id="joinStatus" class="status-msg"></div>
     </div>
 
-    <!-- SCORE SUBMISSION CARD -->
     <div class="card" id="scoreCard" style="display:none;">
         <h2>Log Metric</h2>
         <div class="active-banner">
@@ -388,7 +396,6 @@
         <div id="scoreStatus" class="status-msg"></div>
     </div>
 
-    <!-- LEADERBOARD DATA -->
     <div class="card">
         <h2>Current Standings</h2>
         <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: -12px; margin-bottom: 16px;">Protected: Admins and Team Captains can click rows to inspect detailed scores.</p>
@@ -404,7 +411,6 @@
     </div>
 </div>
 
-<!-- AUDIT MODAL (POPUP) -->
 <div id="auditModal" class="modal" onclick="closeModal(event)">
     <div class="modal-content" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -542,14 +548,47 @@
         const teamName = cachedTeams[activeSessionCode].name;
         const userSlug = `${teamName}_${activeSessionUser}`.replace(/[.#$\[\]]/g, ""); 
 
-        database.ref('scores/' + userSlug).set({
-            team: teamName,
-            user: activeSessionUser,
-            score: numScore
-        });
+        // Fetch user's existing history before saving to perform background validation calculation
+        database.ref('scores/' + userSlug).once('value', (snapshot) => {
+            const currentData = snapshot.val() || { totalScore: 0, entriesCount: 0, averageScore: 0, flagged: false };
+            
+            let previousTotal = currentData.totalScore || 0;
+            let previousCount = currentData.entriesCount || 0;
+            let previousAverage = currentData.averageScore || 0;
+            
+            // Calculate new upcoming running metrics
+            let newTotal = previousTotal + numScore;
+            let newCount = previousCount + 1;
+            let newAverage = Math.round((newTotal / newCount) * 10) / 10;
 
-        document.getElementById('scoreStatus').innerText = "Score metrics recorded!";
-        document.getElementById('scoreInput').value = '';
+            let shouldFlagUser = currentData.flagged || false;
+
+            // DYNAMIC AB-NORMAL SPIKE FILTERING
+            // If they already have an established workout average baseline score, evaluate spikes
+            if (previousCount >= 1 && previousAverage > 0) {
+                // PLACEHOLDER FRAUD CHECK RULE: 
+                // Flag if the newly logged single workout score is over 3x their existing baseline average.
+                // Feel free to replace this math line once you give me your exact score bounds!
+                if (numScore > (previousAverage * 3)) {
+                    shouldFlagUser = true;
+                }
+            }
+
+            // Save running aggregates right along with the profile parameters
+            database.ref('scores/' + userSlug).set({
+                team: teamName,
+                user: activeSessionUser,
+                score: newTotal, // Cumulative master leader score tracking
+                totalScore: newTotal,
+                entriesCount: newCount,
+                averageScore: newAverage,
+                lastLoggedScore: numScore,
+                flagged: shouldFlagUser
+            });
+
+            document.getElementById('scoreStatus').innerText = "Score metrics recorded!";
+            document.getElementById('scoreInput').value = '';
+        });
     }
 
     function populateAdminDropdown() {
@@ -619,7 +658,7 @@
             if (!teamTotals[item.team]) {
                 teamTotals[item.team] = 0;
             }
-            teamTotals[item.team] += item.score;
+            teamTotals[item.team] += (item.totalScore || item.score || 0);
         });
 
         const leaderboardData = Object.keys(teamTotals).map(teamName => {
@@ -690,17 +729,30 @@
         const scoresArray = Object.keys(cachedScores).map(key => cachedScores[key]);
         const teamMembers = scoresArray.filter(item => item.team === teamName);
         
-        teamMembers.sort((a,b) => b.score - a.score);
+        teamMembers.sort((a,b) => (b.totalScore || 0) - (a.totalScore || 0));
 
         teamMembers.forEach(member => {
             const div = document.createElement('div');
             div.className = "audit-item";
 
+            const userTotal = member.totalScore || member.score || 0;
+            const userAvg = member.averageScore || userTotal;
+            const userCount = member.entriesCount || 1;
+
+            let flagElement = "";
+            if (member.flagged === true) {
+                flagElement = `<div class="flag-badge">⚠️ Flagged: Abnormal Average Spike</div>`;
+            }
+
             div.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <strong style="color: var(--text-main); font-size: 1.05rem;">${member.user}</strong>
-                    <span style="color: var(--accent-green); font-weight:700; font-size: 1.1rem;">${member.score} pts</span>
+                    <span style="color: var(--accent-green); font-weight:700; font-size: 1.1rem;">${userTotal} pts</span>
                 </div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                    Average Score: <strong style="color: var(--accent-blue);">${userAvg}</strong> (${userCount} entries logged)
+                </div>
+                ${flagElement}
             `;
             modalBody.appendChild(div);
         });
